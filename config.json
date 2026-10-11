@@ -1,0 +1,13 @@
+{
+  "applicationId": "1558827519493406781",
+  "guildId": "382286746681081857",
+  "forumId": "1557326516227149864",
+  "adminChannelId": "1558816145954443335",
+  "staffRoleId": "382500864394395649",
+  "rolesChannelId": "709120921255804988",
+  "newsChannelId": "507474114823323648",
+  "supportEmail": "support@skill.od.ua",
+  "resolvedTag": "Вирішено",
+  "categories": ["Допомога", "Питання", "Пропозиція", "Ролі", "Discord", "Турніри", "Партнерство", "Реклама", "Інше"],
+  "tournaments": []
+}

@@ -1,0 +1,10 @@
+{
+  "name": "skill-support-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Permanent SKiLL Discord Forum support, separate from INFO and MIX",
+  "type": "module",
+  "engines": { "node": ">=24.0.0 <25" },
+  "scripts": { "start": "node --env-file-if-exists=.env index.js", "test": "node --test", "check": "node --check index.js && node --check src/engine.js && node --check src/ai.js" },
+  "dependencies": { "discord.js": "^14.22.0", "openai": "^6.0.0" }
+}
