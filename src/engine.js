@@ -18,9 +18,9 @@ export class Engine {
     if(this.store.get('job',message.id))return;
     this.store.put('job',message.id,{id:message.id,type:'STAFF',threadId:message.threadId,caseId,message,status:'NEW',attempts:0,nextAt:0});
   }
-  async deliver(channelId,text,key,replyId=null) {
+  async deliver(channelId,text,key,replyId=null,mentionUserId=null) {
     const receipt=this.store.get('delivery',key); if(receipt)return receipt.messageId;
-    const id=await this.discord.send(channelId,text,key,replyId);
+    const id=await this.discord.send(channelId,text,key,replyId,mentionUserId);
     this.store.put('delivery',key,{messageId:id,at:this.now()}); return id;
   }
   async user(job) {
@@ -70,7 +70,7 @@ export class Engine {
       this.store.put('job',job.id,job);
     }
     // Staff drafts stay recoverable privately in SQLite until published successfully.
-    await this.deliver(job.threadId,job.answer,`${job.id}-staff-answer`,job.message.replyTo || null);
+    await this.deliver(job.threadId,job.answer,`${job.id}-staff-answer`,job.message.replyTo || null,item?.userId || job.message.replyUserId || null);
     this.store.append({id:`staff-${job.id}`,threadId:job.threadId,userId:job.message.userId,content:job.answer,at:this.now(),bot:true});
     const state=this.state(job.threadId);
     if(item) {

@@ -6,6 +6,7 @@ import { Store } from './src/store.js';
 import { Engine } from './src/engine.js';
 import { AI } from './src/ai.js';
 import { isStaff } from './src/policy.js';
+import { staffMention } from './src/mentions.js';
 
 const config=JSON.parse(readFileSync(new URL('./config.json',import.meta.url),'utf8'));
 for(const name of ['DISCORD_TOKEN','OPENAI_API_KEY'])if(!process.env[name])throw new Error(`Set ${name} in Railway Variables`);
@@ -33,16 +34,17 @@ function caseCard(item,context) {
 }
 const discord={
   card:caseCard,
-  async send(channelId,text,key,replyId) {
+  async send(channelId,text,key,replyId,mentionUserId) {
     const channel=channelId===config.adminChannelId ? await client.channels.fetch(channelId) : await forumThread(channelId);
     if(channel.isThread() && channel.archived)await channel.setArchived(false);
     let first;
-    for(const [i,content] of chunks(text).entries()) {
+    const mention=staffMention(mentionUserId);
+    for(const [i,content] of chunks(mention.prefix+text).entries()) {
       const receiptKey=`${key}-part-${i}`;
       const receipt=store.get('partDelivery',receiptKey);
       if(receipt){first ||= receipt.messageId;continue;}
       const nonce=createHash('sha256').update(receiptKey).digest('hex').slice(0,24);
-      const sent=await channel.send({content,nonce,enforceNonce:true,allowedMentions:{parse:[],repliedUser:false},
+      const sent=await channel.send({content,nonce,enforceNonce:true,allowedMentions:i===0 ? mention.allowedMentions : {parse:[],repliedUser:false},
         ...(replyId && i===0 ? {reply:{messageReference:replyId,failIfNotExists:false}} : {})});
       store.put('partDelivery',receiptKey,{messageId:sent.id});first ||= sent.id;
     }
@@ -88,13 +90,19 @@ async function onMessage(message) {
   if(command && staff) {
     const content=message.content.trim().replace(/^!bot\s*/i,'');
     if(!content){await message.reply({content:'Після `!bot` напишіть текст.'});return;}
-    let caseId=null,threadId=message.channelId,replyTo=null;
+    let caseId=null,threadId=message.channelId,replyTo=null,replyUserId=null;
     if(inAdmin) {
       const item=store.list('case').find(c=>c.cardId===message.reference?.messageId);
       if(!item){await message.reply({content:'Використайте Reply на картку звернення Support Bot.'});return;}
       caseId=item.id;threadId=item.threadId;replyTo=item.sourceMessageId;
-    } else replyTo=message.reference?.messageId||null;
-    await engine.staff({id:message.id,threadId,userId:message.author.id,content,replyTo},caseId);
+    } else {
+      replyTo=message.reference?.messageId||null;
+      if(replyTo) {
+        const target=await message.channel.messages.fetch(replyTo);
+        if(!target.author.bot && !target.system && !target.webhookId)replyUserId=target.author.id;
+      }
+    }
+    await engine.staff({id:message.id,threadId,userId:message.author.id,content,replyTo,replyUserId},caseId);
     // Save the draft durably first, remove immediately before AI processing.
     await message.delete().catch(error=>store.log({event:'DRAFT_DELETE_ERROR',messageId:message.id,error:error.message}));
     void engine.drain();return;

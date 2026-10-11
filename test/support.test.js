@@ -12,7 +12,7 @@ const decision=(action='ANSWER',extra={})=>({action,category:'Ролі',subtype:
 function fixture(t,choose=()=>decision()) {
   const dir=mkdtempSync(join(tmpdir(),'support-test-'));let store=new Store(dir);let time=Date.now();const calls=[],tags=[];
   let failSend=false;
-  const discord={card:item=>`card:${item.id}`,send:async(channelId,text,key)=>{if(failSend){failSend=false;throw new Error('network');}calls.push({channelId,text,key});return `sent-${calls.length}`;},resolved:async(id,value)=>tags.push({id,value}),updateCase:async()=>{}};
+  const discord={card:item=>`card:${item.id}`,send:async(channelId,text,key,replyId,mentionUserId)=>{if(failSend){failSend=false;throw new Error('network');}calls.push({channelId,text,key,replyId,mentionUserId});return `sent-${calls.length}`;},resolved:async(id,value)=>tags.push({id,value}),updateCase:async()=>{}};
   const ai={sources:async()=>sources,decide:async(c,k)=>choose(c,k),normalize:async raw=>raw.replace('Выберите','Оберіть'),learningScope:async()=>({scope:'GENERAL',secondaryTags:['Допомога']})};
   let engine=new Engine({config,store,ai,discord,now:()=>time});
   const f={get engine(){return engine;},get store(){return store;},calls,tags,ai,advance:ms=>{time+=ms;},fail:()=>{failSend=true;},restart:()=>{store.close();store=new Store(dir);engine=new Engine({config,store,ai,discord,now:()=>time});},msg:(id,content='Не могу получить CS2 Player',extra={})=>({id,threadId:'thread1',userId:'player',username:'Player',ownerId:'owner',roles:[],content,title:'Проблема',tags:['Інше'],firstMessage:content,at:time,attachments:[],...extra})};
@@ -83,4 +83,20 @@ test('normalization cannot drop dates, numbers, links, email or commands',()=>{
 });
 test('missing or invented evidence IDs cannot justify an automatic answer',()=>{
   assert.equal(constrain(decision('ANSWER',{sources:['invented']}),{},sources,config).action,'ADMIN');
+});
+
+test('Staff handoff notifies the original requester and keeps mentions out of learned knowledge',async t=>{
+  const f=fixture(t,()=>decision('ADMIN'));
+  await f.engine.ingest(f.msg('60','Питання',{userId:'123456789012345678'}));await f.engine.drain();
+  const c=f.store.list('case')[0];
+  await f.engine.staff({id:'61',threadId:c.threadId,userId:'staff',content:'Відповідь',replyUserId:'999999999999999999'},c.id);await f.engine.drain();
+  assert.equal(f.calls.at(-1).mentionUserId,c.userId);
+  assert.equal(f.store.list('knowledge')[0].text,'Відповідь');
+});
+test('direct !bot Reply notifies only its target; no Reply means no mention',async t=>{
+  const f=fixture(t);
+  await f.engine.staff({id:'62',threadId:'thread1',userId:'staff',content:'Відповідь',replyTo:'original',replyUserId:'123456789012345678'});await f.engine.drain();
+  assert.equal(f.calls.at(-1).mentionUserId,'123456789012345678');assert.equal(f.calls.at(-1).replyId,'original');
+  await f.engine.staff({id:'63',threadId:'thread1',userId:'staff',content:'Оголошення'});await f.engine.drain();
+  assert.equal(f.calls.at(-1).mentionUserId,null);
 });
